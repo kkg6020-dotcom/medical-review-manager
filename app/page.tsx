@@ -6,7 +6,7 @@ import { differenceInDays, format, parseISO } from 'date-fns'
 import {
   Plus, Search, X, AlertTriangle, CheckCircle, Clock,
   ChevronDown, ChevronUp, Edit2, Trash2, Building2,
-  FileText, Calendar, Tag, StickyNote, ChevronRight
+  FileText, Calendar, Tag, StickyNote, ChevronRight, Copy
 } from 'lucide-react'
 
 const MATERIAL_OPTIONS = ['배너', '영상', '검색광고', 'SNS', '블로그', '기타']
@@ -140,6 +140,18 @@ export default function Home() {
 
   // 폼
   const openAdd = () => { setEditTarget(null); setForm(emptyForm); setShowModal(true) }
+  const openCopy = (r: Review) => {
+    setEditTarget(null)
+    setForm({
+      hospital_name: r.hospital_name,
+      review_number: '',
+      approved_at: '',
+      expires_at: '',
+      material_types: r.material_types,
+      memo: r.memo || '',
+    })
+    setShowModal(true)
+  }
   const openEdit = (r: Review) => {
     setEditTarget(r)
     setForm({ hospital_name: r.hospital_name, review_number: r.review_number, approved_at: r.approved_at, expires_at: r.expires_at, material_types: r.material_types, memo: r.memo || '' })
@@ -262,7 +274,7 @@ export default function Home() {
             <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', overflow: 'visible', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
               {/* 테이블 헤더 */}
               <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 150px 105px 105px 180px 82px 56px',
+                display: 'grid', gridTemplateColumns: '1fr 150px 105px 105px 180px 82px 80px',
                 padding: '11px 20px',
                 background: 'linear-gradient(to bottom, #f8f9fc, #f0f2f8)',
                 borderBottom: '1.5px solid var(--border)',
@@ -362,7 +374,7 @@ export default function Home() {
                 const rowBg = dday < 0 ? '#fff5f5' : dday <= 30 ? '#fffaf5' : 'var(--surface)'
                 return (
                   <div key={r.id} className="fade-in" style={{
-                    display: 'grid', gridTemplateColumns: '1fr 150px 105px 105px 180px 82px 56px',
+                    display: 'grid', gridTemplateColumns: '1fr 150px 105px 105px 180px 82px 80px',
                     padding: '14px 20px', borderBottom: idx < filtered.length - 1 ? '1px solid #f0f2f6' : 'none',
                     alignItems: 'center', background: rowBg, transition: 'background 0.12s'
                   }}>
@@ -381,7 +393,8 @@ export default function Home() {
                       ))}
                     </div>
                     <StatusBadge dday={dday} />
-                    <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                      <button onClick={() => openCopy(r)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="복사해서 새 심의 만들기"><Copy size={14} /></button>
                       <button onClick={() => openEdit(r)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="수정"><Edit2 size={14} /></button>
                       <button onClick={() => setDeleteConfirm(r.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="삭제"><Trash2 size={14} /></button>
                     </div>
@@ -517,7 +530,7 @@ export default function Home() {
           onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
           <div className="slide-in" style={{ background: 'var(--surface)', borderRadius: 18, width: 468, maxHeight: '90vh', overflow: 'auto', padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
-              <h2 style={{ fontSize: 17, fontWeight: 800 }}>{editTarget ? '심의 수정' : '심의 추가'}</h2>
+              <h2 style={{ fontSize: 17, fontWeight: 800 }}>{editTarget ? '심의 수정' : form.hospital_name && !editTarget ? `${form.hospital_name} — 새 심의 추가` : '심의 추가'}</h2>
               <button onClick={() => setShowModal(false)} style={{ border: 'none', background: '#f0f2f8', cursor: 'pointer', color: 'var(--text-secondary)', width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>×</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
