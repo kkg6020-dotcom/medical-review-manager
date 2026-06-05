@@ -144,7 +144,7 @@ export default function Home() {
     setEditTarget(null)
     setForm({
       hospital_name: r.hospital_name,
-      review_number: '',
+      review_number: r.review_number,
       approved_at: '',
       expires_at: '',
       material_types: r.material_types,
