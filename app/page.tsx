@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 
 const MATERIAL_OPTIONS = ['배너', '영상', '검색광고', 'SNS', '블로그', '기타']
-const BUCKET = 'md-review-images'
+const BUCKET = 'md_review-images'
 
 function getDday(expiresAt: string) {
   return differenceInDays(parseISO(expiresAt), new Date())
