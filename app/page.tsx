@@ -22,7 +22,7 @@ const MATERIAL_COLORS: Record<string, { bg: string; color: string; border: strin
 function getMatStyle(m: string) {
   return MATERIAL_COLORS[m] || MATERIAL_COLORS['기타']
 }
-const BUCKET = 'md-review-images'
+const BUCKET = 'md_review-images'
 
 function getDday(expiresAt: string) {
   return differenceInDays(parseISO(expiresAt), new Date())
