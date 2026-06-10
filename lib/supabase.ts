@@ -6,6 +6,13 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
+export type ReviewImage = {
+  url: string
+  path: string
+  material_type: string
+  name: string
+}
+
 export type Review = {
   id: string
   hospital_name: string
@@ -14,6 +21,7 @@ export type Review = {
   expires_at: string
   material_types: string[]
   memo: string | null
+  images: ReviewImage[]
   created_at: string
 }
 
