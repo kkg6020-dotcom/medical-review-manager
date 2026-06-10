@@ -11,7 +11,7 @@ import {
 } from 'lucide-react'
 
 const MATERIAL_OPTIONS = ['배너', '영상', '검색광고', 'SNS', '블로그', '기타']
-const BUCKET = 'md_review-images'
+const BUCKET = 'md-review-images'
 
 function getDday(expiresAt: string) {
   return differenceInDays(parseISO(expiresAt), new Date())
@@ -341,7 +341,7 @@ export default function Home() {
                       </button>
                       {r.memo && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{r.memo}</div>}
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', background: '#f4f5f9', padding: '2px 6px', borderRadius: 4, display: 'inline-block' }}>{r.review_number}</div>
+                    <div title={r.review_number} style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', background: '#f4f5f9', padding: '2px 6px', borderRadius: 4, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{r.review_number}</div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{format(parseISO(r.approved_at), 'yy.MM.dd')}</div>
                     <div style={{ fontSize: 13, fontWeight: dday <= 90 ? 700 : 500, color: dday <= 30 ? 'var(--danger)' : dday <= 90 ? 'var(--warn)' : 'var(--text-secondary)' }}>{format(parseISO(r.expires_at), 'yy.MM.dd')}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -349,31 +349,29 @@ export default function Home() {
                     </div>
 
                     {/* 썸네일 영역 */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'flex-start' }}>
                       {Object.keys(imagesByMat).length === 0 ? (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', fontSize: 11 }}>
                           <ImageIcon size={12} /> 없음
                         </div>
                       ) : (
-                        Object.entries(imagesByMat).map(([mat, imgs]) => (
-                          <div key={mat} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <span style={{ fontSize: 10, color: 'var(--text-muted)', minWidth: 28 }}>{mat}</span>
-                            <div style={{ display: 'flex', gap: 3 }}>
-                              {imgs.slice(0, 4).map((img, i) => (
-                                <div key={i} onClick={() => setLightbox({ url: img.url, name: img.name })}
-                                  style={{ width: 36, height: 36, borderRadius: 5, overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--border)', flexShrink: 0, position: 'relative', background: '#f0f2f8' }}>
-                                  <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'background 0.15s' }}
-                                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.3)')}
-                                    onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,0,0,0)')}>
-                                    <ZoomIn size={12} color="white" />
-                                  </div>
-                                </div>
-                              ))}
-                              {imgs.length > 4 && <div style={{ width: 36, height: 36, borderRadius: 5, background: 'var(--surface-alt)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }} onClick={() => openEdit(r)}>+{imgs.length - 4}</div>}
+                        Object.entries(imagesByMat).map(([mat, imgs]) =>
+                          imgs.slice(0, 3).map((img, i) => (
+                            <div key={`${mat}-${i}`} onClick={() => setLightbox({ url: img.url, name: img.name })}
+                              title={`${mat}: ${img.name}`}
+                              style={{ width: 36, height: 36, borderRadius: 5, overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--border)', flexShrink: 0, position: 'relative', background: '#f0f2f8' }}>
+                              <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', transition: 'background 0.15s' }}
+                                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.3)')}
+                                onMouseLeave={e => (e.currentTarget.style.background = 'rgba(0,0,0,0)')} />
                             </div>
-                          </div>
-                        ))
+                          ))
+                        )
+                      )}
+                      {Object.values(imagesByMat).flat().length > 6 && (
+                        <div style={{ width: 36, height: 36, borderRadius: 5, background: 'var(--surface-alt)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }} onClick={() => openEdit(r)}>
+                          +{Object.values(imagesByMat).flat().length - 6}
+                        </div>
                       )}
                     </div>
 
