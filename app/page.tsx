@@ -11,6 +11,17 @@ import {
 } from 'lucide-react'
 
 const MATERIAL_OPTIONS = ['배너', '영상', '검색광고', 'SNS', '블로그', '기타']
+const MATERIAL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+  '배너':    { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+  '영상':    { bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
+  '검색광고': { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+  'SNS':    { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+  '블로그':  { bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
+  '기타':    { bg: '#f4f5f9', color: '#4b5563', border: '#dde0ea' },
+}
+function getMatStyle(m: string) {
+  return MATERIAL_COLORS[m] || MATERIAL_COLORS['기타']
+}
 const BUCKET = 'md-review-images'
 
 function getDday(expiresAt: string) {
@@ -18,7 +29,7 @@ function getDday(expiresAt: string) {
 }
 
 function StatusBadge({ dday }: { dday: number }) {
-  const base: React.CSSProperties = { padding: '4px 11px', borderRadius: 20, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-block' }
+  const base: React.CSSProperties = { width: 72, padding: '4px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-block' }
   if (dday < 0)   return <span style={{ ...base, background: 'var(--danger-light)', color: '#991b1b', border: '1px solid var(--danger-border)' }}>만료됨</span>
   if (dday <= 30)  return <span style={{ ...base, background: '#fff1f0', color: '#c0392b', border: '1px solid #fca5a5' }}>D-{dday}</span>
   if (dday <= 90)  return <span style={{ ...base, background: 'var(--warn-light)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }}>D-{dday}</span>
@@ -248,15 +259,15 @@ export default function Home() {
             {/* 요약 카드 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
               {[
-                { label: '만료됨', count: counts.expired, f: 'expired' as FilterType, icon: <X size={18} />, colorVar: 'var(--danger)', bgVar: 'var(--danger-light)', borderVar: 'var(--danger-border)' },
-                { label: 'D-30 이내', count: counts.danger, f: 'danger' as FilterType, icon: <AlertTriangle size={18} />, colorVar: 'var(--warn)', bgVar: 'var(--warn-light)', borderVar: 'var(--warn-border)' },
-                { label: 'D-90 이내', count: counts.warning, f: 'warning' as FilterType, icon: <Clock size={18} />, colorVar: '#b45309', bgVar: '#fffbeb', borderVar: '#fde68a' },
-                { label: '정상', count: counts.safe, f: 'safe' as FilterType, icon: <CheckCircle size={18} />, colorVar: 'var(--safe)', bgVar: 'var(--safe-light)', borderVar: 'var(--safe-border)' },
+                { label: '만료됨',   count: counts.expired, f: 'expired' as FilterType, icon: <X size={18} />,            colorVar: '#fff', border: '#e53e3e', bg: '#e53e3e', activeBorder: '#c53030' },
+                { label: 'D-30 이내', count: counts.danger,  f: 'danger'  as FilterType, icon: <AlertTriangle size={18} />, colorVar: '#fff', border: '#ed8936', bg: '#ed8936', activeBorder: '#dd6b20' },
+                { label: 'D-90 이내', count: counts.warning, f: 'warning' as FilterType, icon: <Clock size={18} />,         colorVar: '#fff', border: '#3182ce', bg: '#3182ce', activeBorder: '#2b6cb0' },
+                { label: '정상',      count: counts.safe,    f: 'safe'    as FilterType, icon: <CheckCircle size={18} />,   colorVar: '#fff', border: '#2b6cb0', bg: '#2b6cb0', activeBorder: '#2c5282' },
               ].map(c => (
-                <button key={c.label} onClick={() => setFilter(f => f === c.f ? 'all' : c.f)} style={{ background: filter === c.f ? c.bgVar : 'var(--surface)', border: `1.5px solid ${filter === c.f ? c.colorVar : c.borderVar}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                  <div style={{ color: c.colorVar, marginBottom: 10 }}>{c.icon}</div>
-                  <div style={{ fontSize: 32, fontWeight: 800, color: c.colorVar, lineHeight: 1, letterSpacing: -1 }}>{c.count}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 6, fontWeight: 500 }}>{c.label}</div>
+                <button key={c.label} onClick={() => setFilter(f => f === c.f ? 'all' : c.f)} style={{ background: (c as any).bg, border: `2px solid ${filter === c.f ? (c as any).activeBorder : (c as any).border}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s', boxShadow: filter === c.f ? `0 4px 20px rgba(0,0,0,0.13)` : '0 1px 4px rgba(0,0,0,0.04)', transform: filter === c.f ? 'translateY(-2px)' : 'none' }}>
+                  <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10 }}>{c.icon}</div>
+                  <div style={{ fontSize: 32, fontWeight: 800, color: 'white', lineHeight: 1, letterSpacing: -1, textShadow:'0 1px 3px rgba(0,0,0,0.15)' }}>{c.count}</div>
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 6, fontWeight: 600 }}>{c.label}</div>
                 </button>
               ))}
             </div>
@@ -273,7 +284,7 @@ export default function Home() {
             {/* 테이블 */}
             <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', overflow: 'visible', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
               {/* 헤더 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 148px 100px 100px 160px 120px 80px 80px', padding: '11px 20px', background: 'linear-gradient(to bottom, #f8f9fc, #f0f2f8)', borderBottom: '1.5px solid var(--border)', fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.3, borderRadius: '14px 14px 0 0' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 160px 105px 115px 185px 130px 90px 80px', padding: '12px 24px', background: 'linear-gradient(to bottom, #f8f9fc, #f0f2f8)', borderBottom: '1.5px solid var(--border)', fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.3, borderRadius: '14px 14px 0 0' }}>
                 {/* 병원명 드롭다운 */}
                 <div ref={ddRef} style={{ position: 'relative' }}>
                   <button onClick={() => { setDdOpen(o => !o); setDdSearch('') }} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', letterSpacing: 0.3, color: ddActive ? 'var(--accent)' : 'var(--text-secondary)', transition: 'color 0.15s' }}>
@@ -304,14 +315,14 @@ export default function Home() {
                     </div>
                   )}
                 </div>
-                <div>심의번호</div>
+                <div style={{ textAlign: 'center' }}>심의번호</div>
                 <div>승인일</div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('expires_at')}>
                   만료일 {sortKey === 'expires_at' ? (sortAsc ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : null}
                 </div>
                 <div>소재 종류</div>
                 <div>이미지</div>
-                <div>상태</div>
+                <div style={{ textAlign: 'center' }}>상태</div>
                 <div />
               </div>
 
@@ -334,18 +345,18 @@ export default function Home() {
                   imagesByMat[img.material_type].push(img)
                 })
                 return (
-                  <div key={r.id} className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1fr 148px 100px 100px 160px 120px 80px 80px', padding: '12px 20px', borderBottom: idx < filtered.length - 1 ? '1px solid #f0f2f6' : 'none', alignItems: 'center', background: rowBg, transition: 'background 0.12s' }}>
+                  <div key={r.id} className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1.4fr 160px 105px 115px 185px 130px 90px 80px', padding: '14px 24px', borderBottom: idx < filtered.length - 1 ? '1px solid #f0f2f6' : 'none', alignItems: 'center', background: rowBg, transition: 'background 0.12s' }}>
                     <div>
                       <button onClick={() => { setTab('hospital'); setHospSearch(r.hospital_name) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--accent)', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}>
                         {r.hospital_name}
                       </button>
                       {r.memo && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{r.memo}</div>}
                     </div>
-                    <div title={r.review_number} style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', background: '#f4f5f9', padding: '2px 6px', borderRadius: 4, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{r.review_number}</div>
+                    <div style={{ textAlign: 'center' }}><span title={r.review_number} style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', background: '#f4f5f9', padding: '2px 6px', borderRadius: 4, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{r.review_number}</span></div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{format(parseISO(r.approved_at), 'yy.MM.dd')}</div>
                     <div style={{ fontSize: 13, fontWeight: dday <= 90 ? 700 : 500, color: dday <= 30 ? 'var(--danger)' : dday <= 90 ? 'var(--warn)' : 'var(--text-secondary)' }}>{format(parseISO(r.expires_at), 'yy.MM.dd')}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {r.material_types.map(m => <span key={m} style={{ fontSize: 11, padding: '2px 8px', background: '#eef0f8', border: '1px solid #d8dbe8', borderRadius: 5, color: 'var(--text-secondary)', fontWeight: 500 }}>{m}</span>)}
+                      {r.material_types.map(m => { const s=getMatStyle(m); return <span key={m} style={{ fontSize: 11, padding: '2px 8px', background: s.bg, border: `1px solid ${s.border}`, borderRadius: 5, color: s.color, fontWeight: 600 }}>{m}</span> })}
                     </div>
 
                     {/* 썸네일 영역 */}
@@ -375,7 +386,7 @@ export default function Home() {
                       )}
                     </div>
 
-                    <StatusBadge dday={dday} />
+                    <div style={{ textAlign: 'center' }}><StatusBadge dday={dday} /></div>
                     <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                       <button onClick={() => openCopy(r)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="복사해서 새 심의 만들기"><Copy size={14} /></button>
                       <button onClick={() => openEdit(r)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="수정"><Edit2 size={14} /></button>
@@ -451,7 +462,7 @@ export default function Home() {
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-secondary)', background: 'white', border: '1px solid var(--border)', padding: '2px 7px', borderRadius: 4 }}>{r.review_number}</span>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 5 }}>
-                                  {r.material_types.map(m => <span key={m} style={{ fontSize: 10, padding: '1px 6px', background: '#eef0f8', border: '1px solid #d8dbe8', borderRadius: 4, color: 'var(--text-secondary)' }}>{m}</span>)}
+                                  {r.material_types.map(m => { const s=getMatStyle(m); return <span key={m} style={{ fontSize: 10, padding: '1px 6px', background: s.bg, border: `1px solid ${s.border}`, borderRadius: 4, color: s.color, fontWeight: 600 }}>{m}</span> })}
                                 </div>
                                 {r.memo && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{r.memo}</div>}
                               </div>
@@ -512,7 +523,7 @@ export default function Home() {
               <Field icon={<Tag size={14} />} label="광고 소재 종류">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
                   {MATERIAL_OPTIONS.map(m => (
-                    <button key={m} type="button" onClick={() => toggleMaterial(m)} style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: `1.5px solid ${form.material_types.includes(m) ? 'var(--accent)' : 'var(--border)'}`, background: form.material_types.includes(m) ? 'var(--accent-light)' : 'transparent', color: form.material_types.includes(m) ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: form.material_types.includes(m) ? 700 : 500 }}>{m}</button>
+                    <MatBtn key={m} m={m} selected={form.material_types.includes(m)} onClick={() => toggleMaterial(m)} />
                   ))}
                 </div>
               </Field>
@@ -604,6 +615,19 @@ function Field({ icon, label, children }: { icon: React.ReactNode; label: string
       </label>
       {children}
     </div>
+  )
+}
+
+function MatBtn({ m, selected, onClick }: { m: string; selected: boolean; onClick: () => void }) {
+  const s = getMatStyle(m)
+  return (
+    <button type="button" onClick={onClick} style={{
+      padding: '7px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
+      border: `1.5px solid ${selected ? s.color : 'var(--border)'}`,
+      background: selected ? s.bg : 'transparent',
+      color: selected ? s.color : 'var(--text-secondary)',
+      fontWeight: selected ? 700 : 500
+    }}>{m}</button>
   )
 }
 
