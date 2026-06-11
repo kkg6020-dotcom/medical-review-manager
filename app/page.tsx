@@ -1,44 +1,42 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { supabase, type Review, type ReviewInsert, type ReviewImage } from '@/lib/supabase'
+import { supabase, type Review, type ReviewInsert, type ReviewImage, type Manager, type ManagerInsert } from '@/lib/supabase'
 import { differenceInDays, format, parseISO } from 'date-fns'
 import {
   Plus, Search, X, AlertTriangle, CheckCircle, Clock,
   ChevronDown, ChevronUp, Edit2, Trash2, Building2,
   FileText, Calendar, Tag, StickyNote, ChevronRight, Copy,
-  ImageIcon, Upload, ZoomIn
+  ImageIcon, Upload, Users, UserPlus
 } from 'lucide-react'
 
 const MATERIAL_OPTIONS = ['배너', '영상', '검색광고', 'SNS', '블로그', '기타']
-const MATERIAL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  '배너':    { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
-  '영상':    { bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
-  '검색광고': { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
-  'SNS':    { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
-  '블로그':  { bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
-  '기타':    { bg: '#f4f5f9', color: '#4b5563', border: '#dde0ea' },
-}
-function getMatStyle(m: string) {
-  return MATERIAL_COLORS[m] || MATERIAL_COLORS['기타']
-}
 const BUCKET = 'md_review-images'
+const MANAGER_COLORS = ['#e53e3e','#dd6b20','#d69e2e','#38a169','#3182ce','#805ad5','#d53f8c','#2b6cb0','#718096','#2c7a7b']
 
 function getDday(expiresAt: string) {
   return differenceInDays(parseISO(expiresAt), new Date())
 }
 
 function StatusBadge({ dday }: { dday: number }) {
-  const base: React.CSSProperties = { width: 72, padding: '4px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-block' }
-  if (dday < 0)   return <span style={{ ...base, background: 'var(--danger-light)', color: '#991b1b', border: '1px solid var(--danger-border)' }}>만료됨</span>
-  if (dday <= 30)  return <span style={{ ...base, background: '#fff1f0', color: '#c0392b', border: '1px solid #fca5a5' }}>D-{dday}</span>
-  if (dday <= 90)  return <span style={{ ...base, background: 'var(--warn-light)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }}>D-{dday}</span>
-  return <span style={{ ...base, background: 'var(--safe-light)', color: 'var(--safe)', border: '1px solid var(--safe-border)' }}>D-{dday}</span>
+  const base: React.CSSProperties = { width: 72, padding: '4px 10px', borderRadius: 20, fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap', display: 'inline-block', border: '1px solid', textAlign: 'center' }
+  if (dday < 0)   return <span style={{ ...base, background: 'var(--danger-light)', color: '#991b1b', borderColor: 'var(--danger-border)' }}>만료됨</span>
+  if (dday <= 30)  return <span style={{ ...base, background: '#fff1f0', color: '#c0392b', borderColor: '#fca5a5' }}>D-{dday}</span>
+  if (dday <= 90)  return <span style={{ ...base, background: 'var(--warn-light)', color: 'var(--warn)', borderColor: 'var(--warn-border)' }}>D-{dday}</span>
+  return <span style={{ ...base, background: 'var(--safe-light)', color: 'var(--safe)', borderColor: 'var(--safe-border)' }}>D-{dday}</span>
+}
+
+function Avatar({ name, color, size = 24 }: { name: string; color: string; size?: number }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', background: color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.42, fontWeight: 800, color: 'white', flexShrink: 0 }}>
+      {name[0]}
+    </div>
+  )
 }
 
 const emptyForm: ReviewInsert = {
   hospital_name: '', review_number: '', approved_at: '', expires_at: '',
-  material_types: [], memo: '', images: [],
+  material_types: [], memo: '', images: [], manager_id: null,
 }
 
 type Tab = 'list' | 'hospital'
@@ -57,6 +55,7 @@ const worstOrder: Record<string, number> = { expired: 0, danger: 1, warning: 2, 
 
 export default function Home() {
   const [reviews, setReviews] = useState<Review[]>([])
+  const [managers, setManagers] = useState<Manager[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -70,9 +69,16 @@ export default function Home() {
   const [ddSearch, setDdSearch] = useState('')
   const ddRef = useRef<HTMLDivElement>(null)
 
+  // 담당자 필터 드롭다운
+  const [mgrFilterId, setMgrFilterId] = useState<string | null>(null)
+  const [mgrDdOpen, setMgrDdOpen] = useState(false)
+  const [mgrDdSearch, setMgrDdSearch] = useState('')
+  const mgrDdRef = useRef<HTMLDivElement>(null)
+
   const [hospSearch, setHospSearch] = useState('')
   const [hospSort, setHospSort] = useState<HospSortMode>('worst')
 
+  // 심의 모달
   const [showModal, setShowModal] = useState(false)
   const [editTarget, setEditTarget] = useState<Review | null>(null)
   const [form, setForm] = useState<ReviewInsert>(emptyForm)
@@ -80,36 +86,52 @@ export default function Home() {
   const [uploadingMat, setUploadingMat] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  // 이미지 라이트박스
+  // 담당자 관리 모달
+  const [showMgrModal, setShowMgrModal] = useState(false)
+  const [newMgrName, setNewMgrName] = useState('')
+  const [newMgrColor, setNewMgrColor] = useState(MANAGER_COLORS[0])
+  const [savingMgr, setSavingMgr] = useState(false)
+
+  // 심의번호 분리 입력
+  const [numLeft, setNumLeft] = useState('')
+  const [numRight, setNumRight] = useState('')
+
+  // 라이트박스
   const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null)
 
-  const fetchReviews = useCallback(async () => {
+  const fetchAll = useCallback(async () => {
     setLoading(true)
-    const { data, error } = await supabase.from('reviews').select('*').order('expires_at', { ascending: true })
-    if (error) setError(error.message)
-    else setReviews((data || []).map(r => ({ ...r, images: r.images || [] })))
+    const [{ data: rData, error: rErr }, { data: mData, error: mErr }] = await Promise.all([
+      supabase.from('reviews').select('*').order('expires_at', { ascending: true }),
+      supabase.from('managers').select('*').order('created_at', { ascending: true }),
+    ])
+    if (rErr) setError(rErr.message)
+    else setReviews((rData || []).map(r => ({ ...r, images: r.images || [] })))
+    if (!mErr) setManagers(mData || [])
     setLoading(false)
   }, [])
 
-  useEffect(() => { fetchReviews() }, [fetchReviews])
+  useEffect(() => { fetchAll() }, [fetchAll])
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
+    const h = (e: MouseEvent) => {
       if (ddRef.current && !ddRef.current.contains(e.target as Node)) setDdOpen(false)
+      if (mgrDdRef.current && !mgrDdRef.current.contains(e.target as Node)) setMgrDdOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
   }, [])
 
-  // 키보드 ESC로 라이트박스 닫기
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(null) }
+    document.addEventListener('keydown', h)
+    return () => document.removeEventListener('keydown', h)
   }, [])
 
+  const getMgr = (id: string | null) => managers.find(m => m.id === id) || null
   const hospitalNames = [...new Set(reviews.map(r => r.hospital_name))].sort((a, b) => a.localeCompare(b))
   const filteredDdNames = hospitalNames.filter(n => !ddSearch || n.includes(ddSearch))
+  const filteredMgrList = managers.filter(m => !mgrDdSearch || m.name.includes(mgrDdSearch))
 
   const toggleHospital = (name: string) => {
     setSelectedHospitals(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name])
@@ -118,6 +140,7 @@ export default function Home() {
   const filtered = reviews
     .filter(r => {
       if (selectedHospitals.length > 0 && !selectedHospitals.includes(r.hospital_name)) return false
+      if (mgrFilterId && r.manager_id !== mgrFilterId) return false
       if (search && !r.hospital_name.includes(search) && !r.review_number.includes(search)) return false
       const d = getDday(r.expires_at)
       if (filter === 'expired') return d < 0
@@ -152,7 +175,7 @@ export default function Home() {
       return b.reviews.length - a.reviews.length
     })
 
-  // 이미지 업로드
+  // 이미지 업로드/삭제
   const handleImageUpload = async (files: FileList, materialType: string) => {
     if (!files.length) return
     setUploadingMat(materialType)
@@ -169,59 +192,107 @@ export default function Home() {
     setUploadingMat(null)
   }
 
-  // 이미지 삭제 (모달에서)
   const removeImage = async (img: ReviewImage) => {
     await supabase.storage.from(BUCKET).remove([img.path])
     setForm(f => ({ ...f, images: f.images.filter(i => i.path !== img.path) }))
   }
 
-  // 폼
-  const openAdd = () => { setEditTarget(null); setForm(emptyForm); setShowModal(true) }
+  // 심의 CRUD
+  const openAdd = () => {
+    setEditTarget(null); setForm(emptyForm); setNumLeft(''); setNumRight(''); setShowModal(true)
+  }
   const openCopy = (r: Review) => {
     setEditTarget(null)
-    setForm({ hospital_name: r.hospital_name, review_number: r.review_number, approved_at: r.approved_at, expires_at: r.expires_at, material_types: r.material_types, memo: r.memo || '', images: [] })
+    const parts = r.review_number.split('-중-')
+    setNumLeft(parts[0] || ''); setNumRight(parts[1] || '')
+    setForm({ hospital_name: r.hospital_name, review_number: r.review_number, approved_at: r.approved_at, expires_at: r.expires_at, material_types: r.material_types, memo: r.memo || '', images: [], manager_id: r.manager_id })
     setShowModal(true)
   }
   const openEdit = (r: Review) => {
     setEditTarget(r)
-    setForm({ hospital_name: r.hospital_name, review_number: r.review_number, approved_at: r.approved_at, expires_at: r.expires_at, material_types: r.material_types, memo: r.memo || '', images: r.images || [] })
+    const parts = r.review_number.split('-중-')
+    setNumLeft(parts[0] || ''); setNumRight(parts[1] || '')
+    setForm({ hospital_name: r.hospital_name, review_number: r.review_number, approved_at: r.approved_at, expires_at: r.expires_at, material_types: r.material_types, memo: r.memo || '', images: r.images || [], manager_id: r.manager_id })
     setShowModal(true)
   }
+
   const handleSave = async () => {
-    if (!form.hospital_name || !form.review_number || !form.approved_at || !form.expires_at) {
-      alert('병원명, 심의번호, 승인일, 만료일은 필수입니다.')
-      return
+    if (!form.hospital_name || !numLeft || !numRight || !form.approved_at || !form.expires_at) {
+      alert('병원명, 심의번호, 승인일, 만료일은 필수입니다.'); return
     }
+    const reviewNumber = `${numLeft}-중-${numRight}`
+    const payload = { ...form, review_number: reviewNumber }
     setSaving(true)
     if (editTarget) {
-      const { error } = await supabase.from('reviews').update(form).eq('id', editTarget.id)
+      const { error } = await supabase.from('reviews').update(payload).eq('id', editTarget.id)
       if (error) alert('수정 실패: ' + error.message)
     } else {
-      const { error } = await supabase.from('reviews').insert(form)
+      const { error } = await supabase.from('reviews').insert(payload)
       if (error) alert('등록 실패: ' + error.message)
     }
-    setSaving(false); setShowModal(false); fetchReviews()
+    setSaving(false); setShowModal(false); fetchAll()
   }
+
   const handleDelete = async (id: string) => {
     const r = reviews.find(x => x.id === id)
-    if (r?.images?.length) {
-      await supabase.storage.from(BUCKET).remove(r.images.map(i => i.path))
-    }
+    if (r?.images?.length) await supabase.storage.from(BUCKET).remove(r.images.map(i => i.path))
     const { error } = await supabase.from('reviews').delete().eq('id', id)
     if (error) alert('삭제 실패: ' + error.message)
-    setDeleteConfirm(null); fetchReviews()
+    setDeleteConfirm(null); fetchAll()
   }
+
   const toggleMaterial = (m: string) => {
     setForm(f => ({ ...f, material_types: f.material_types.includes(m) ? f.material_types.filter(x => x !== m) : [...f.material_types, m] }))
   }
+
   const handleApprovedChange = (val: string) => {
     if (!val) { setForm(f => ({ ...f, approved_at: '', expires_at: '' })); return }
     const d = new Date(val); d.setFullYear(d.getFullYear() + 3)
     setForm(f => ({ ...f, approved_at: val, expires_at: d.toISOString().split('T')[0] }))
   }
 
+  // 병원명 입력 시 기존 담당자 자동 선택
+  const handleHospitalChange = (val: string) => {
+    setForm(f => ({ ...f, hospital_name: val }))
+    if (!editTarget) {
+      const last = reviews.filter(r => r.hospital_name === val).sort((a, b) => b.created_at.localeCompare(a.created_at))[0]
+      if (last?.manager_id) setForm(f => ({ ...f, hospital_name: val, manager_id: last.manager_id }))
+    }
+  }
+
+  // 담당자 CRUD
+  const handleAddManager = async () => {
+    if (!newMgrName.trim()) { alert('이름을 입력해주세요.'); return }
+    if (managers.find(m => m.name === newMgrName.trim())) { alert('이미 등록된 담당자입니다.'); return }
+    setSavingMgr(true)
+    const { error } = await supabase.from('managers').insert({ name: newMgrName.trim(), color: newMgrColor } as ManagerInsert)
+    if (error) alert('추가 실패: ' + error.message)
+    setNewMgrName(''); setSavingMgr(false); fetchAll()
+  }
+
+  const handleDeleteManager = async (id: string) => {
+    const m = managers.find(x => x.id === id)!
+    const cnt = reviews.filter(r => r.manager_id === id).length
+    const msg = cnt > 0 ? `${m.name} 담당자를 삭제하면 담당 심의 ${cnt}건의 담당자가 해제됩니다. 삭제할까요?` : `${m.name} 담당자를 삭제할까요?`
+    if (!confirm(msg)) return
+    await supabase.from('managers').delete().eq('id', id)
+    if (mgrFilterId === id) setMgrFilterId(null)
+    fetchAll()
+  }
+
   const ddLabel = selectedHospitals.length === 0 ? '병원명' : selectedHospitals.length === 1 ? selectedHospitals[0] : `${selectedHospitals.length}개 병원`
   const ddActive = selectedHospitals.length > 0
+  const mgrFilter = getMgr(mgrFilterId)
+
+  const MATERIAL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+    '배너':    { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+    '영상':    { bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
+    '검색광고': { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+    'SNS':    { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+    '블로그':  { bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
+    '기타':    { bg: '#f4f5f9', color: '#4b5563', border: '#dde0ea' },
+  }
+  const getMatStyle = (m: string) => MATERIAL_COLORS[m] || MATERIAL_COLORS['기타']
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
@@ -237,9 +308,14 @@ export default function Home() {
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 1 }}>Medical Review Manager</div>
           </div>
         </div>
-        <button onClick={openAdd} style={{ background: 'white', color: 'var(--accent)', border: 'none', borderRadius: 8, padding: '8px 15px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, boxShadow: '0 1px 4px rgba(0,0,0,0.15)' }}>
-          <Plus size={15} /> 심의 추가
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowMgrModal(true)} style={{ background: 'rgba(255,255,255,0.15)', color: 'white', border: '1.5px solid rgba(255,255,255,0.3)', borderRadius: 8, padding: '7px 13px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit' }}>
+            <Users size={14} /> 담당자 관리
+          </button>
+          <button onClick={openAdd} style={{ background: 'white', color: 'var(--accent)', border: 'none', borderRadius: 8, padding: '8px 15px', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, boxShadow: '0 1px 4px rgba(0,0,0,0.15)', fontFamily: 'inherit' }}>
+            <Plus size={15} /> 심의 추가
+          </button>
+        </div>
       </header>
 
       {/* 탭 */}
@@ -259,75 +335,109 @@ export default function Home() {
             {/* 요약 카드 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 24 }}>
               {[
-                { label: '만료됨',   count: counts.expired, f: 'expired' as FilterType, icon: <X size={18} />,            colorVar: '#fff', border: '#e53e3e', bg: '#e53e3e', activeBorder: '#c53030' },
-                { label: 'D-30 이내', count: counts.danger,  f: 'danger'  as FilterType, icon: <AlertTriangle size={18} />, colorVar: '#fff', border: '#ed8936', bg: '#ed8936', activeBorder: '#dd6b20' },
-                { label: 'D-90 이내', count: counts.warning, f: 'warning' as FilterType, icon: <Clock size={18} />,         colorVar: '#fff', border: '#3182ce', bg: '#3182ce', activeBorder: '#2b6cb0' },
-                { label: '정상',      count: counts.safe,    f: 'safe'    as FilterType, icon: <CheckCircle size={18} />,   colorVar: '#fff', border: '#2b6cb0', bg: '#2b6cb0', activeBorder: '#2c5282' },
+                { label: '만료됨',   count: counts.expired, f: 'expired' as FilterType, icon: <X size={18} />,            bg: '#e53e3e', activeBorder: '#c53030' },
+                { label: 'D-30 이내', count: counts.danger,  f: 'danger'  as FilterType, icon: <AlertTriangle size={18} />, bg: '#ed8936', activeBorder: '#dd6b20' },
+                { label: 'D-90 이내', count: counts.warning, f: 'warning' as FilterType, icon: <Clock size={18} />,         bg: '#3182ce', activeBorder: '#2b6cb0' },
+                { label: '정상',      count: counts.safe,    f: 'safe'    as FilterType, icon: <CheckCircle size={18} />,   bg: '#2b6cb0', activeBorder: '#2c5282' },
               ].map(c => (
-                <button key={c.label} onClick={() => setFilter(f => f === c.f ? 'all' : c.f)} style={{ background: (c as any).bg, border: `2px solid ${filter === c.f ? (c as any).activeBorder : (c as any).border}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s', boxShadow: filter === c.f ? `0 4px 20px rgba(0,0,0,0.13)` : '0 1px 4px rgba(0,0,0,0.04)', transform: filter === c.f ? 'translateY(-2px)' : 'none' }}>
+                <button key={c.label} onClick={() => setFilter(f => f === c.f ? 'all' : c.f)} style={{ background: c.bg, border: `2px solid ${filter === c.f ? c.activeBorder : c.bg}`, borderRadius: 14, padding: '18px 20px', cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s', boxShadow: filter === c.f ? '0 4px 20px rgba(0,0,0,0.18)' : '0 1px 4px rgba(0,0,0,0.08)', transform: filter === c.f ? 'translateY(-2px)' : 'none' }}>
                   <div style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 10 }}>{c.icon}</div>
-                  <div style={{ fontSize: 32, fontWeight: 800, color: 'white', lineHeight: 1, letterSpacing: -1, textShadow:'0 1px 3px rgba(0,0,0,0.15)' }}>{c.count}</div>
+                  <div style={{ fontSize: 32, fontWeight: 800, color: 'white', lineHeight: 1, letterSpacing: -1, textShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>{c.count}</div>
                   <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', marginTop: 6, fontWeight: 600 }}>{c.label}</div>
                 </button>
               ))}
             </div>
 
-            {/* 검색 */}
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ position: 'relative' }}>
+            {/* 툴바 */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center' }}>
+              <div style={{ position: 'relative', flex: 1 }}>
                 <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
                 <input placeholder="병원명 또는 심의번호 검색" value={search} onChange={e => setSearch(e.target.value)}
                   style={{ width: '100%', padding: '10px 12px 10px 36px', border: '1.5px solid var(--border)', borderRadius: 9, fontSize: 13, background: 'var(--surface)', outline: 'none', color: 'var(--text-primary)', fontFamily: 'inherit' }} />
+              </div>
+
+              {/* 담당자 필터 드롭다운 */}
+              <div ref={mgrDdRef} style={{ position: 'relative', flexShrink: 0 }}>
+                <button onClick={() => { setMgrDdOpen(o => !o); setMgrDdSearch('') }} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 14px', border: `2px solid ${mgrFilterId ? 'var(--accent)' : '#3182ce'}`, borderRadius: 9, background: mgrFilterId ? 'linear-gradient(135deg,#1d4ed8,#3182ce)' : 'linear-gradient(135deg,#ebf4ff,#dbeafe)', fontSize: 13, fontWeight: 700, color: mgrFilterId ? 'white' : '#1d4ed8', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', minWidth: 148, boxShadow: '0 2px 8px rgba(49,130,206,0.15)', transition: 'all .15s' }}>
+                  <Users size={14} />
+                  {mgrFilter ? <><Avatar name={mgrFilter.name} color={mgrFilter.color} size={20} />{mgrFilter.name}</> : '전체 담당자'}
+                  <ChevronDown size={11} style={{ marginLeft: 'auto', transition: 'transform 0.2s', transform: mgrDdOpen ? 'rotate(180deg)' : 'none', opacity: 0.7 }} />
+                </button>
+                {mgrDdOpen && (
+                  <div className="drop-in" style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 50, background: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.13)', minWidth: 210, padding: 6 }}>
+                    <input placeholder="담당자 검색..." value={mgrDdSearch} onChange={e => setMgrDdSearch(e.target.value)} autoFocus
+                      style={{ width: '100%', padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 12, fontFamily: 'inherit', outline: 'none', marginBottom: 5, background: 'var(--surface-alt)' }} />
+                    {/* 전체 */}
+                    <div onClick={() => { setMgrFilterId(null); setMgrDdOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: mgrFilterId === null ? 700 : 500, color: mgrFilterId === null ? 'var(--accent)' : 'var(--text-primary)', background: mgrFilterId === null ? 'var(--accent-light)' : 'transparent' }}>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: '#718096', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: 'white', flexShrink: 0 }}>전</div>
+                      <span style={{ flex: 1 }}>전체 담당자</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--surface-alt)', padding: '1px 6px', borderRadius: 10 }}>{reviews.length}건</span>
+                    </div>
+                    <div style={{ height: 1, background: 'var(--border)', margin: '5px 0' }} />
+                    {filteredMgrList.map(m => {
+                      const cnt = reviews.filter(r => r.manager_id === m.id).length
+                      const sel = mgrFilterId === m.id
+                      return (
+                        <div key={m.id} onClick={() => { setMgrFilterId(m.id); setMgrDdOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 13, fontWeight: sel ? 700 : 500, color: sel ? 'var(--accent)' : 'var(--text-primary)', background: sel ? 'var(--accent-light)' : 'transparent' }}>
+                          <Avatar name={m.name} color={m.color} size={26} />
+                          <span style={{ flex: 1 }}>{m.name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--surface-alt)', padding: '1px 6px', borderRadius: 10 }}>{cnt}건</span>
+                        </div>
+                      )
+                    })}
+                    {managers.length === 0 && <div style={{ padding: '12px 10px', fontSize: 12, color: 'var(--text-muted)', textAlign: 'center' }}>등록된 담당자가 없습니다.</div>}
+                  </div>
+                )}
+              </div>
+
+              {/* 병원명 드롭다운 */}
+              <div ref={ddRef} style={{ position: 'relative', flexShrink: 0 }}>
+                <button onClick={() => { setDdOpen(o => !o); setDdSearch('') }} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '9px 14px', border: `1.5px solid ${ddActive ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 9, background: ddActive ? 'var(--accent-light)' : 'var(--surface)', fontSize: 13, fontWeight: 600, color: ddActive ? 'var(--accent)' : 'var(--text-secondary)', cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap', minWidth: 120 }}>
+                  {ddLabel}
+                  {ddActive && <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: '50%' }} />}
+                  <ChevronDown size={11} style={{ transition: 'transform 0.2s', transform: ddOpen ? 'rotate(180deg)' : 'none', marginLeft: 'auto' }} />
+                </button>
+                {ddOpen && (
+                  <div className="drop-in" style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 50, background: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.13)', minWidth: 210, maxHeight: 260, overflowY: 'auto', padding: 6 }}>
+                    <input placeholder="병원 검색..." value={ddSearch} onChange={e => setDdSearch(e.target.value)} onClick={e => e.stopPropagation()} autoFocus
+                      style={{ width: '100%', padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 12, fontFamily: 'inherit', outline: 'none', marginBottom: 5, background: 'var(--surface-alt)' }} />
+                    <div onClick={() => { setSelectedHospitals([]); setDdOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: selectedHospitals.length === 0 ? 'var(--accent)' : 'var(--text-secondary)', background: selectedHospitals.length === 0 ? 'var(--accent-light)' : 'transparent' }}>
+                      <span style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${selectedHospitals.length === 0 ? 'var(--accent)' : 'var(--border)'}`, background: selectedHospitals.length === 0 ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'white', flexShrink: 0 }}>{selectedHospitals.length === 0 ? '✓' : ''}</span>
+                      전체 ({reviews.length}건)
+                    </div>
+                    <div style={{ height: 1, background: 'var(--border)', margin: '5px 0' }} />
+                    {filteredDdNames.map(name => {
+                      const sel = selectedHospitals.includes(name)
+                      const cnt = reviews.filter(r => r.hospital_name === name).length
+                      return (
+                        <div key={name} onClick={e => { e.stopPropagation(); toggleHospital(name) }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 13, color: sel ? 'var(--accent)' : 'var(--text-primary)', fontWeight: sel ? 700 : 500, background: sel ? 'var(--accent-light)' : 'transparent' }}>
+                          <span style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${sel ? 'var(--accent)' : 'var(--border)'}`, background: sel ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'white', flexShrink: 0 }}>{sel ? '✓' : ''}</span>
+                          <span style={{ flex: 1 }}>{name}</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{cnt}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             </div>
 
             {/* 테이블 */}
             <div style={{ background: 'var(--surface)', borderRadius: 14, border: '1px solid var(--border)', overflow: 'visible', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }}>
-              {/* 헤더 */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 160px 105px 115px 185px 130px 90px 80px', padding: '12px 24px', background: 'linear-gradient(to bottom, #f8f9fc, #f0f2f8)', borderBottom: '1.5px solid var(--border)', fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.3, borderRadius: '14px 14px 0 0' }}>
-                {/* 병원명 드롭다운 */}
-                <div ref={ddRef} style={{ position: 'relative' }}>
-                  <button onClick={() => { setDdOpen(o => !o); setDdSearch('') }} style={{ display: 'flex', alignItems: 'center', gap: 5, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11.5, fontWeight: 700, fontFamily: 'inherit', letterSpacing: 0.3, color: ddActive ? 'var(--accent)' : 'var(--text-secondary)', transition: 'color 0.15s' }}>
-                    {ddLabel}
-                    {ddActive && <span style={{ width: 6, height: 6, background: 'var(--accent)', borderRadius: '50%', flexShrink: 0 }} />}
-                    <ChevronDown size={11} style={{ transition: 'transform 0.2s', transform: ddOpen ? 'rotate(180deg)' : 'rotate(0deg)' }} />
-                  </button>
-                  {ddOpen && (
-                    <div className="drop-in" style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 50, background: 'var(--surface)', border: '1.5px solid var(--border)', borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.13)', minWidth: 210, maxHeight: 260, overflowY: 'auto', padding: 6 }}>
-                      <input placeholder="병원 검색..." value={ddSearch} onChange={e => setDdSearch(e.target.value)} onClick={e => e.stopPropagation()} autoFocus
-                        style={{ width: '100%', padding: '7px 10px', border: '1.5px solid var(--border)', borderRadius: 7, fontSize: 12, fontFamily: 'inherit', outline: 'none', marginBottom: 5, background: 'var(--surface-alt)', color: 'var(--text-primary)' }} />
-                      <div onClick={() => { setSelectedHospitals([]); setDdOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 700, color: selectedHospitals.length === 0 ? 'var(--accent)' : 'var(--text-secondary)', background: selectedHospitals.length === 0 ? 'var(--accent-light)' : 'transparent' }}>
-                        <span style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${selectedHospitals.length === 0 ? 'var(--accent)' : 'var(--border)'}`, background: selectedHospitals.length === 0 ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'white', flexShrink: 0 }}>{selectedHospitals.length === 0 ? '✓' : ''}</span>
-                        전체 ({reviews.length}건)
-                      </div>
-                      <div style={{ height: 1, background: 'var(--border)', margin: '5px 0' }} />
-                      {filteredDdNames.map(name => {
-                        const sel = selectedHospitals.includes(name)
-                        const cnt = reviews.filter(r => r.hospital_name === name).length
-                        return (
-                          <div key={name} onClick={e => { e.stopPropagation(); toggleHospital(name) }} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 7, cursor: 'pointer', fontSize: 13, color: sel ? 'var(--accent)' : 'var(--text-primary)', fontWeight: sel ? 700 : 500, background: sel ? 'var(--accent-light)' : 'transparent' }}>
-                            <span style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${sel ? 'var(--accent)' : 'var(--border)'}`, background: sel ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: 'white', flexShrink: 0 }}>{sel ? '✓' : ''}</span>
-                            <span style={{ flex: 1 }}>{name}</span>
-                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{cnt}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 160px 105px 115px 185px 120px 110px 90px 88px', padding: '12px 24px', background: 'linear-gradient(to bottom, #f8f9fc, #f0f2f8)', borderBottom: '1.5px solid var(--border)', fontSize: 11.5, fontWeight: 700, color: 'var(--text-secondary)', letterSpacing: 0.3, borderRadius: '14px 14px 0 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }} onClick={() => toggleSort('hospital_name')}>병원명{sortKey === 'hospital_name' ? (sortAsc ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : null}</div>
                 <div style={{ textAlign: 'center' }}>심의번호</div>
                 <div>승인일</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort('expires_at')}>
-                  만료일 {sortKey === 'expires_at' ? (sortAsc ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : null}
-                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 3, cursor: 'pointer' }} onClick={() => toggleSort('expires_at')}>만료일{sortKey === 'expires_at' ? (sortAsc ? <ChevronUp size={11} /> : <ChevronDown size={11} />) : null}</div>
                 <div>소재 종류</div>
                 <div>이미지</div>
+                <div>담당자</div>
                 <div style={{ textAlign: 'center' }}>상태</div>
                 <div />
               </div>
 
               {loading && <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>불러오는 중...</div>}
-              {error && <div style={{ padding: 48, textAlign: 'center', color: 'var(--danger)', fontSize: 14 }}>⚠️ Supabase 연결 오류: {error}</div>}
+              {error && <div style={{ padding: 48, textAlign: 'center', color: 'var(--danger)', fontSize: 14 }}>⚠️ {error}</div>}
               {!loading && !error && filtered.length === 0 && (
                 <div style={{ padding: 64, textAlign: 'center' }}>
                   <Building2 size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
@@ -338,38 +448,32 @@ export default function Home() {
               {!loading && !error && filtered.map((r, idx) => {
                 const dday = getDday(r.expires_at)
                 const rowBg = dday < 0 ? '#fff5f5' : dday <= 30 ? '#fffaf5' : 'var(--surface)'
-                // 소재 종류별 이미지 그룹핑
                 const imagesByMat: Record<string, ReviewImage[]> = {}
                 ;(r.images || []).forEach(img => {
                   if (!imagesByMat[img.material_type]) imagesByMat[img.material_type] = []
                   imagesByMat[img.material_type].push(img)
                 })
+                const mgr = getMgr(r.manager_id)
                 return (
-                  <div key={r.id} className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1.4fr 160px 105px 115px 185px 130px 90px 80px', padding: '14px 24px', borderBottom: idx < filtered.length - 1 ? '1px solid #f0f2f6' : 'none', alignItems: 'center', background: rowBg, transition: 'background 0.12s' }}>
+                  <div key={r.id} className="fade-in" style={{ display: 'grid', gridTemplateColumns: '1.4fr 160px 105px 115px 185px 120px 110px 90px 88px', padding: '15px 24px', borderBottom: idx < filtered.length - 1 ? '1px solid #f0f2f6' : 'none', alignItems: 'center', background: rowBg, transition: 'background 0.12s' }}>
                     <div>
-                      <button onClick={() => { setTab('hospital'); setHospSearch(r.hospital_name) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--accent)', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}>
-                        {r.hospital_name}
-                      </button>
+                      <button onClick={() => { setTab('hospital'); setHospSearch(r.hospital_name) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 14, color: 'var(--accent)', padding: 0, fontFamily: 'inherit', textAlign: 'left' }}>{r.hospital_name}</button>
                       {r.memo && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{r.memo}</div>}
                     </div>
-                    <div style={{ textAlign: 'center' }}><span title={r.review_number} style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', background: '#f4f5f9', padding: '2px 6px', borderRadius: 4, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 140 }}>{r.review_number}</span></div>
+                    <div style={{ textAlign: 'center' }}><span title={r.review_number} style={{ fontSize: 12, color: 'var(--text-secondary)', fontFamily: 'monospace', background: '#f4f5f9', padding: '2px 6px', borderRadius: 4, display: 'inline-block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 150 }}>{r.review_number}</span></div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{format(parseISO(r.approved_at), 'yy.MM.dd')}</div>
                     <div style={{ fontSize: 13, fontWeight: dday <= 90 ? 700 : 500, color: dday <= 30 ? 'var(--danger)' : dday <= 90 ? 'var(--warn)' : 'var(--text-secondary)' }}>{format(parseISO(r.expires_at), 'yy.MM.dd')}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {r.material_types.map(m => { const s=getMatStyle(m); return <span key={m} style={{ fontSize: 11, padding: '2px 8px', background: s.bg, border: `1px solid ${s.border}`, borderRadius: 5, color: s.color, fontWeight: 600 }}>{m}</span> })}
+                      {r.material_types.map(m => { const s = getMatStyle(m); return <span key={m} style={{ fontSize: 11, padding: '2px 8px', background: s.bg, border: `1px solid ${s.border}`, borderRadius: 5, color: s.color, fontWeight: 600 }}>{m}</span> })}
                     </div>
-
-                    {/* 썸네일 영역 */}
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, alignItems: 'flex-start' }}>
+                    {/* 썸네일 */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                       {Object.keys(imagesByMat).length === 0 ? (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', fontSize: 11 }}>
-                          <ImageIcon size={12} /> 없음
-                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--text-muted)', fontSize: 11 }}><ImageIcon size={12} /> 없음</div>
                       ) : (
                         Object.entries(imagesByMat).map(([mat, imgs]) =>
                           imgs.slice(0, 3).map((img, i) => (
-                            <div key={`${mat}-${i}`} onClick={() => setLightbox({ url: img.url, name: img.name })}
-                              title={`${mat}: ${img.name}`}
+                            <div key={`${mat}-${i}`} onClick={() => setLightbox({ url: img.url, name: img.name })} title={`${mat}: ${img.name}`}
                               style={{ width: 36, height: 36, borderRadius: 5, overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--border)', flexShrink: 0, position: 'relative', background: '#f0f2f8' }}>
                               <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0)', transition: 'background 0.15s' }}
@@ -379,29 +483,31 @@ export default function Home() {
                           ))
                         )
                       )}
-                      {Object.values(imagesByMat).flat().length > 6 && (
-                        <div style={{ width: 36, height: 36, borderRadius: 5, background: 'var(--surface-alt)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }} onClick={() => openEdit(r)}>
-                          +{Object.values(imagesByMat).flat().length - 6}
-                        </div>
-                      )}
                     </div>
-
+                    {/* 담당자 */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      {mgr ? (<><Avatar name={mgr.name} color={mgr.color} size={22} /><span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>{mgr.name}</span></>) : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>미지정</span>}
+                    </div>
                     <div style={{ textAlign: 'center' }}><StatusBadge dday={dday} /></div>
-                    <div style={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-                      <button onClick={() => openCopy(r)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="복사해서 새 심의 만들기"><Copy size={14} /></button>
-                      <button onClick={() => openEdit(r)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="수정"><Edit2 size={14} /></button>
-                      <button onClick={() => setDeleteConfirm(r.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 5, borderRadius: 6 }} title="삭제"><Trash2 size={14} /></button>
+                    <div style={{ display: 'flex', gap: 3, justifyContent: 'flex-end' }}>
+                      {[
+                        { icon: <Copy size={13} />, onClick: () => openCopy(r), title: '복사', hoverBorder: '#93c5fd', hoverColor: 'var(--accent)' },
+                        { icon: <Edit2 size={13} />, onClick: () => openEdit(r), title: '수정', hoverBorder: '#93c5fd', hoverColor: 'var(--accent)' },
+                        { icon: <Trash2 size={13} />, onClick: () => setDeleteConfirm(r.id), title: '삭제', hoverBorder: '#fca5a5', hoverColor: 'var(--danger)' },
+                      ].map((btn, i) => (
+                        <button key={i} onClick={btn.onClick} title={btn.title}
+                          style={{ border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 6px', borderRadius: 6, display: 'flex', alignItems: 'center', transition: 'all .15s' }}
+                          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = btn.hoverBorder; (e.currentTarget as HTMLButtonElement).style.color = btn.hoverColor }}
+                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}>
+                          {btn.icon}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 )
               })}
             </div>
-
-            {!loading && (
-              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'right', fontWeight: 500 }}>
-                총 {filtered.length}건{(filter !== 'all' || selectedHospitals.length > 0) ? ` (전체 ${reviews.length}건)` : ''}
-              </div>
-            )}
+            {!loading && <div style={{ marginTop: 10, fontSize: 12, color: 'var(--text-muted)', textAlign: 'right', fontWeight: 500 }}>총 {filtered.length}건{(filter !== 'all' || selectedHospitals.length > 0 || mgrFilterId) ? ` (전체 ${reviews.length}건)` : ''}</div>}
           </>
         )}
 
@@ -420,49 +526,55 @@ export default function Home() {
                 <option value="count">심의 건수순</option>
               </select>
             </div>
-            {loading && <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)', fontSize: 14 }}>불러오는 중...</div>}
+            {loading && <div style={{ padding: 48, textAlign: 'center', color: 'var(--text-muted)' }}>불러오는 중...</div>}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
               {hospGroups.map(({ name, reviews: hrs }) => {
                 const worst = worstStatus(hrs)
-                const expiredCnt = hrs.filter(r => getDday(r.expires_at) < 0).length
-                const dangerCnt = hrs.filter(r => { const d = getDday(r.expires_at); return d >= 0 && d <= 30 }).length
-                const warnCnt = hrs.filter(r => { const d = getDday(r.expires_at); return d > 30 && d <= 90 }).length
-                const safeCnt = hrs.filter(r => getDday(r.expires_at) > 90).length
+                const ec = hrs.filter(r => getDday(r.expires_at) < 0).length
+                const dc = hrs.filter(r => { const d = getDday(r.expires_at); return d >= 0 && d <= 30 }).length
+                const wc = hrs.filter(r => { const d = getDday(r.expires_at); return d > 30 && d <= 90 }).length
+                const sc = hrs.filter(r => getDday(r.expires_at) > 90).length
                 const borderColor = worst === 'expired' ? 'var(--danger)' : worst === 'danger' ? 'var(--warn)' : worst === 'warning' ? '#b45309' : 'var(--safe)'
-                let topBadge: React.ReactNode
-                if (expiredCnt > 0) topBadge = <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--danger-light)', color: '#991b1b', border: '1px solid var(--danger-border)' }}>만료 {expiredCnt}건</span>
-                else if (dangerCnt > 0) topBadge = <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fff1f0', color: '#c0392b', border: '1px solid #fca5a5' }}>D-30 이내 {dangerCnt}건</span>
-                else if (warnCnt > 0) topBadge = <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--warn-light)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }}>D-90 이내 {warnCnt}건</span>
-                else topBadge = <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--safe-light)', color: 'var(--safe)', border: '1px solid var(--safe-border)' }}>정상</span>
-                const sorted = [...hrs].sort((a, b) => getDday(a.expires_at) - getDday(b.expires_at))
+                const topBadge = ec > 0 ? <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--danger-light)', color: '#991b1b', border: '1px solid var(--danger-border)' }}>만료 {ec}건</span>
+                  : dc > 0 ? <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: '#fff1f0', color: '#c0392b', border: '1px solid #fca5a5' }}>D-30 이내 {dc}건</span>
+                  : wc > 0 ? <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--warn-light)', color: 'var(--warn)', border: '1px solid var(--warn-border)' }}>D-90 이내 {wc}건</span>
+                  : <span style={{ padding: '4px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: 'var(--safe-light)', color: 'var(--safe)', border: '1px solid var(--safe-border)' }}>정상</span>
+                // 담당자 추출 (중복 제거)
+                const mgrIds = [...new Set(hrs.map(r => r.manager_id).filter(Boolean))]
+                const hospMgrs = mgrIds.map(id => getMgr(id)).filter(Boolean) as Manager[]
                 return (
                   <div key={name} className="fade-in" style={{ background: 'var(--surface)', borderRadius: 16, padding: '20px 22px', border: '1.5px solid var(--border)', borderLeft: `4px solid ${borderColor}`, boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
                       <div>
-                        <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text-primary)' }}>{name}</div>
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500, marginTop: 2 }}>심의 {hrs.length}건</div>
+                        <div style={{ fontSize: 15, fontWeight: 800 }}>{name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>심의 {hrs.length}건</div>
                       </div>
                       {topBadge}
                     </div>
+                    {/* 담당자 표시 */}
+                    {hospMgrs.length > 0 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10 }}>
+                        {hospMgrs.map(m => <Avatar key={m.id} name={m.name} color={m.color} size={22} />)}
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)', fontWeight: 600 }}>{hospMgrs.map(m => m.name).join(', ')}</span>
+                      </div>
+                    )}
                     <div style={{ display: 'flex', gap: 3, marginBottom: 14, height: 5, borderRadius: 4, overflow: 'hidden' }}>
-                      {expiredCnt > 0 && <div style={{ flex: expiredCnt, background: 'var(--danger)' }} />}
-                      {dangerCnt > 0 && <div style={{ flex: dangerCnt, background: '#f97316' }} />}
-                      {warnCnt > 0 && <div style={{ flex: warnCnt, background: '#eab308' }} />}
-                      {safeCnt > 0 && <div style={{ flex: safeCnt, background: '#22c55e' }} />}
+                      {ec > 0 && <div style={{ flex: ec, background: 'var(--danger)' }} />}
+                      {dc > 0 && <div style={{ flex: dc, background: '#f97316' }} />}
+                      {wc > 0 && <div style={{ flex: wc, background: '#eab308' }} />}
+                      {sc > 0 && <div style={{ flex: sc, background: '#22c55e' }} />}
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {sorted.map(r => {
+                      {[...hrs].sort((a, b) => getDday(a.expires_at) - getDday(b.expires_at)).map(r => {
                         const d = getDday(r.expires_at)
-                        const rowBg = d < 0 ? '#fff5f5' : d <= 30 ? '#fff9f5' : 'var(--surface-alt)'
-                        const borderC = d < 0 ? 'var(--danger-border)' : d <= 30 ? 'var(--warn-border)' : 'var(--border)'
                         const allImgs = r.images || []
                         return (
-                          <div key={r.id} style={{ background: rowBg, border: `1px solid ${borderC}`, borderRadius: 10, padding: '11px 14px' }}>
+                          <div key={r.id} style={{ background: d < 0 ? '#fff5f5' : d <= 30 ? '#fff9f5' : 'var(--surface-alt)', border: `1px solid ${d < 0 ? 'var(--danger-border)' : d <= 30 ? 'var(--warn-border)' : 'var(--border)'}`, borderRadius: 10, padding: '11px 14px' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <span style={{ fontSize: 12, fontFamily: 'monospace', color: 'var(--text-secondary)', background: 'white', border: '1px solid var(--border)', padding: '2px 7px', borderRadius: 4 }}>{r.review_number}</span>
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 5 }}>
-                                  {r.material_types.map(m => { const s=getMatStyle(m); return <span key={m} style={{ fontSize: 10, padding: '1px 6px', background: s.bg, border: `1px solid ${s.border}`, borderRadius: 4, color: s.color, fontWeight: 600 }}>{m}</span> })}
+                                  {r.material_types.map(m => { const s = getMatStyle(m); return <span key={m} style={{ fontSize: 10, padding: '1px 6px', background: s.bg, border: `1px solid ${s.border}`, borderRadius: 4, color: s.color, fontWeight: 600 }}>{m}</span> })}
                                 </div>
                                 {r.memo && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{r.memo}</div>}
                               </div>
@@ -471,15 +583,13 @@ export default function Home() {
                                 <div style={{ fontSize: 11, color: d <= 30 ? 'var(--danger)' : d <= 90 ? 'var(--warn)' : 'var(--text-muted)', fontWeight: d <= 90 ? 700 : 400 }}>~{format(parseISO(r.expires_at), 'yy.MM.dd')}</div>
                               </div>
                             </div>
-                            {/* 썸네일 행 */}
                             {allImgs.length > 0 && (
                               <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
                                 {allImgs.slice(0, 6).map((img, i) => (
-                                  <div key={i} onClick={() => setLightbox({ url: img.url, name: img.name })} style={{ width: 40, height: 40, borderRadius: 6, overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--border)', flexShrink: 0 }}>
+                                  <div key={i} onClick={() => setLightbox({ url: img.url, name: img.name })} style={{ width: 40, height: 40, borderRadius: 6, overflow: 'hidden', cursor: 'pointer', border: '1px solid var(--border)' }}>
                                     <img src={img.url} alt={img.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   </div>
                                 ))}
-                                {allImgs.length > 6 && <div style={{ width: 40, height: 40, borderRadius: 6, background: 'var(--surface-alt)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', cursor: 'pointer' }} onClick={() => openEdit(r)}>+{allImgs.length - 6}</div>}
                               </div>
                             )}
                           </div>
@@ -498,7 +608,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* 추가/수정 모달 */}
+      {/* ── 심의 추가/수정 모달 ── */}
       {showModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowModal(false) }}>
@@ -509,10 +619,14 @@ export default function Home() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
               <Field icon={<Building2 size={14} />} label="병원명 *">
-                <input value={form.hospital_name} onChange={e => setForm(f => ({ ...f, hospital_name: e.target.value }))} placeholder="예: 강남연세의원" style={inputStyle} />
+                <input value={form.hospital_name} onChange={e => handleHospitalChange(e.target.value)} placeholder="예: 강남연세의원" style={inputStyle} />
               </Field>
               <Field icon={<FileText size={14} />} label="심의번호 *">
-                <ReviewNumberInput value={form.review_number} onChange={v => setForm(f => ({ ...f, review_number: v }))} />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <input value={numLeft} onChange={e => setNumLeft(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="250320" maxLength={6} style={{ ...inputStyle, textAlign: 'center', letterSpacing: 2, flex: 1 }} />
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0 }}>- 중 -</span>
+                  <input value={numRight} onChange={e => setNumRight(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="185904" maxLength={6} style={{ ...inputStyle, textAlign: 'center', letterSpacing: 2, flex: 1 }} />
+                </div>
               </Field>
               <Field icon={<Calendar size={14} />} label="심의 승인일 * (입력 시 만료일 자동 계산)">
                 <input type="date" value={form.approved_at} onChange={e => handleApprovedChange(e.target.value)} style={inputStyle} max="2099-12-31" />
@@ -522,18 +636,14 @@ export default function Home() {
               </Field>
               <Field icon={<Tag size={14} />} label="광고 소재 종류">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
-                  {MATERIAL_OPTIONS.map(m => (
-                    <MatBtn key={m} m={m} selected={form.material_types.includes(m)} onClick={() => toggleMaterial(m)} />
-                  ))}
+                  {MATERIAL_OPTIONS.map(m => { const s = getMatStyle(m); const sel = form.material_types.includes(m); return <button key={m} type="button" onClick={() => toggleMaterial(m)} style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: `1.5px solid ${sel ? s.color : 'var(--border)'}`, background: sel ? s.bg : 'transparent', color: sel ? s.color : 'var(--text-secondary)', fontWeight: sel ? 700 : 500 }}>{m}</button> })}
                 </div>
               </Field>
-
-              {/* 이미지 업로드 — 소재 종류별 */}
               <Field icon={<ImageIcon size={14} />} label="광고 소재 이미지">
                 {form.material_types.length === 0 ? (
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '10px 0' }}>소재 종류를 먼저 선택해주세요.</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>소재 종류를 먼저 선택해주세요.</div>
                 ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {form.material_types.map(mat => {
                       const matImgs = form.images.filter(i => i.material_type === mat)
                       return (
@@ -541,10 +651,8 @@ export default function Home() {
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                             <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)' }}>{mat}</span>
                             <label style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', borderRadius: 6, border: '1.5px solid var(--accent)', color: 'var(--accent)', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: 'var(--accent-light)' }}>
-                              <Upload size={12} />
-                              {uploadingMat === mat ? '업로드 중...' : '이미지 추가'}
-                              <input type="file" accept="image/*,video/*" multiple style={{ display: 'none' }}
-                                onChange={e => e.target.files && handleImageUpload(e.target.files, mat)} disabled={uploadingMat !== null} />
+                              <Upload size={12} />{uploadingMat === mat ? '업로드 중...' : '이미지 추가'}
+                              <input type="file" accept="image/*,video/*" multiple style={{ display: 'none' }} onChange={e => e.target.files && handleImageUpload(e.target.files, mat)} disabled={uploadingMat !== null} />
                             </label>
                           </div>
                           {matImgs.length > 0 ? (
@@ -556,25 +664,101 @@ export default function Home() {
                                 </div>
                               ))}
                             </div>
-                          ) : (
-                            <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>업로드된 이미지가 없습니다.</div>
-                          )}
+                          ) : <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>업로드된 이미지가 없습니다.</div>}
                         </div>
                       )
                     })}
                   </div>
                 )}
               </Field>
-
+              {/* 담당자 선택 */}
+              <Field icon={<Users size={14} />} label="담당자">
+                {managers.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 0' }}>
+                    담당자가 없습니다. 헤더의 <b>담당자 관리</b>에서 먼저 추가해주세요.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+                    {managers.map(m => {
+                      const sel = form.manager_id === m.id
+                      return (
+                        <button key={m.id} type="button" onClick={() => setForm(f => ({ ...f, manager_id: sel ? null : m.id }))}
+                          style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 12px', borderRadius: 8, border: `1.5px solid ${sel ? m.color : 'var(--border)'}`, background: sel ? m.color + '18' : 'transparent', color: sel ? m.color : 'var(--text-secondary)', fontWeight: sel ? 700 : 500, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .12s' }}>
+                          <Avatar name={m.name} color={m.color} size={20} />{m.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </Field>
               <Field icon={<StickyNote size={14} />} label="메모">
                 <textarea value={form.memo || ''} onChange={e => setForm(f => ({ ...f, memo: e.target.value }))} placeholder="추가 메모나 비고 사항" rows={3} style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }} />
               </Field>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 22, justifyContent: 'flex-end' }}>
               <button onClick={() => setShowModal(false)} style={{ padding: '9px 16px', borderRadius: 9, border: '1.5px solid var(--border)', background: 'transparent', fontSize: 13, cursor: 'pointer', color: 'var(--text-secondary)', fontFamily: 'inherit', fontWeight: 600 }}>취소</button>
-              <button onClick={handleSave} disabled={saving || uploadingMat !== null} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving || uploadingMat !== null ? 0.7 : 1, fontFamily: 'inherit', boxShadow: '0 2px 8px rgba(29,78,216,0.3)' }}>
+              <button onClick={handleSave} disabled={saving || uploadingMat !== null} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: 'white', fontSize: 13, fontWeight: 700, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving || uploadingMat !== null ? 0.7 : 1, fontFamily: 'inherit' }}>
                 {saving ? '저장 중...' : editTarget ? '수정 완료' : '추가'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 담당자 관리 모달 ── */}
+      {showMgrModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', backdropFilter: 'blur(2px)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowMgrModal(false) }}>
+          <div className="slide-in" style={{ background: 'var(--surface)', borderRadius: 18, width: 420, maxHeight: '90vh', overflow: 'auto', padding: 28, boxShadow: '0 20px 60px rgba(0,0,0,0.18)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
+              <h2 style={{ fontSize: 17, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 8 }}><Users size={18} /> 담당자 관리</h2>
+              <button onClick={() => setShowMgrModal(false)} style={{ border: 'none', background: '#f0f2f8', cursor: 'pointer', color: 'var(--text-secondary)', width: 30, height: 30, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>×</button>
+            </div>
+
+            {/* 기존 담당자 목록 */}
+            {managers.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--text-muted)', fontSize: 13 }}>등록된 담당자가 없습니다.<br />아래에서 추가해보세요.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
+                {managers.map(m => {
+                  const cnt = reviews.filter(r => r.manager_id === m.id).length
+                  return (
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', border: '1.5px solid var(--border)', borderRadius: 10, background: 'var(--surface-alt)' }}>
+                      <Avatar name={m.name} color={m.color} size={34} />
+                      <span style={{ fontSize: 14, fontWeight: 700, flex: 1 }}>{m.name}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-muted)', background: 'var(--border)', padding: '2px 8px', borderRadius: 10 }}>{cnt}건 담당</span>
+                      <button onClick={() => handleDeleteManager(m.id)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '4px 8px', borderRadius: 6, fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}
+                        onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = 'var(--danger-light)'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger)' }}
+                        onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none'; (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-muted)' }}>
+                        삭제
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* 새 담당자 추가 */}
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 18 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}><UserPlus size={13} /> 새 담당자 추가</div>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <input value={newMgrName} onChange={e => setNewMgrName(e.target.value)} placeholder="이름 입력" onKeyDown={e => e.key === 'Enter' && handleAddManager()} style={{ ...inputStyle, flex: 1 }} />
+                <button onClick={handleAddManager} disabled={savingMgr} style={{ padding: '9px 16px', borderRadius: 9, border: 'none', background: 'var(--accent)', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>추가</button>
+              </div>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 8 }}>색상 선택</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {MANAGER_COLORS.map(c => (
+                  <div key={c} onClick={() => setNewMgrColor(c)} style={{ width: 26, height: 26, borderRadius: '50%', background: c, cursor: 'pointer', border: `3px solid ${newMgrColor === c ? '#1a1916' : 'transparent'}`, transform: newMgrColor === c ? 'scale(1.15)' : 'none', transition: 'all .15s', boxShadow: newMgrColor === c ? '0 0 0 1px white inset' : 'none' }} />
+                ))}
+              </div>
+              {/* 미리보기 */}
+              {newMgrName && (
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--surface-alt)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <Avatar name={newMgrName} color={newMgrColor} size={28} />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>{newMgrName}</span>
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>미리보기</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -618,50 +802,18 @@ function Field({ icon, label, children }: { icon: React.ReactNode; label: string
   )
 }
 
-// 심의번호 마스크 입력: XXXXXX-중-XXXXXX
-function ReviewNumberInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  // value는 "250320-중-185904" 형식으로 저장
-  const parts = value.split('-중-')
-  const left = parts[0] || ''
-  const right = parts[1] ?? ''
-
-  const update = (l: string, r: string) => {
-    const clean = (s: string) => s.replace(/\D/g, '').slice(0, 6)
-    const cl = clean(l), cr = clean(r)
-    onChange(cl || cr ? `${cl}-중-${cr}` : '')
-  }
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-      <input
-        value={left}
-        onChange={e => update(e.target.value, right)}
-        placeholder="250320"
-        maxLength={6}
-        style={{ ...inputStyle, textAlign: 'center', letterSpacing: 2, flex: 1 }}
-      />
-      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0 }}>- 중 -</span>
-      <input
-        value={right}
-        onChange={e => update(left, e.target.value)}
-        placeholder="185904"
-        maxLength={6}
-        style={{ ...inputStyle, textAlign: 'center', letterSpacing: 2, flex: 1 }}
-      />
-    </div>
-  )
-}
-
 function MatBtn({ m, selected, onClick }: { m: string; selected: boolean; onClick: () => void }) {
-  const s = getMatStyle(m)
+  const MATERIAL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+    '배너':    { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' },
+    '영상':    { bg: '#fdf4ff', color: '#7e22ce', border: '#e9d5ff' },
+    '검색광고': { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' },
+    'SNS':    { bg: '#f0fdf4', color: '#166534', border: '#bbf7d0' },
+    '블로그':  { bg: '#fefce8', color: '#854d0e', border: '#fde68a' },
+    '기타':    { bg: '#f4f5f9', color: '#4b5563', border: '#dde0ea' },
+  }
+  const s = MATERIAL_COLORS[m] || MATERIAL_COLORS['기타']
   return (
-    <button type="button" onClick={onClick} style={{
-      padding: '7px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit',
-      border: `1.5px solid ${selected ? s.color : 'var(--border)'}`,
-      background: selected ? s.bg : 'transparent',
-      color: selected ? s.color : 'var(--text-secondary)',
-      fontWeight: selected ? 700 : 500
-    }}>{m}</button>
+    <button type="button" onClick={onClick} style={{ padding: '7px 12px', borderRadius: 7, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', border: `1.5px solid ${selected ? s.color : 'var(--border)'}`, background: selected ? s.bg : 'transparent', color: selected ? s.color : 'var(--text-secondary)', fontWeight: selected ? 700 : 500 }}>{m}</button>
   )
 }
 

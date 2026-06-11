@@ -13,6 +13,15 @@ export type ReviewImage = {
   name: string
 }
 
+export type Manager = {
+  id: string
+  name: string
+  color: string
+  created_at: string
+}
+
+export type ManagerInsert = Omit<Manager, 'id' | 'created_at'>
+
 export type Review = {
   id: string
   hospital_name: string
@@ -22,6 +31,7 @@ export type Review = {
   material_types: string[]
   memo: string | null
   images: ReviewImage[]
+  manager_id: string | null
   created_at: string
 }
 
