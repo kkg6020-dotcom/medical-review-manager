@@ -179,7 +179,7 @@ export default function Home() {
   const openAdd = () => { setEditTarget(null); setForm(emptyForm); setShowModal(true) }
   const openCopy = (r: Review) => {
     setEditTarget(null)
-    setForm({ hospital_name: r.hospital_name, review_number: r.review_number, approved_at: '', expires_at: '', material_types: r.material_types, memo: r.memo || '', images: [] })
+    setForm({ hospital_name: r.hospital_name, review_number: r.review_number, approved_at: r.approved_at, expires_at: r.expires_at, material_types: r.material_types, memo: r.memo || '', images: [] })
     setShowModal(true)
   }
   const openEdit = (r: Review) => {
@@ -512,13 +512,13 @@ export default function Home() {
                 <input value={form.hospital_name} onChange={e => setForm(f => ({ ...f, hospital_name: e.target.value }))} placeholder="예: 강남연세의원" style={inputStyle} />
               </Field>
               <Field icon={<FileText size={14} />} label="심의번호 *">
-                <input value={form.review_number} onChange={e => setForm(f => ({ ...f, review_number: e.target.value }))} placeholder="예: 2024-심의-00123" style={inputStyle} />
+                <ReviewNumberInput value={form.review_number} onChange={v => setForm(f => ({ ...f, review_number: v }))} />
               </Field>
               <Field icon={<Calendar size={14} />} label="심의 승인일 * (입력 시 만료일 자동 계산)">
-                <input type="date" value={form.approved_at} onChange={e => handleApprovedChange(e.target.value)} style={inputStyle} />
+                <input type="date" value={form.approved_at} onChange={e => handleApprovedChange(e.target.value)} style={inputStyle} max="2099-12-31" />
               </Field>
               <Field icon={<Calendar size={14} />} label="만료일 *">
-                <input type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} style={inputStyle} />
+                <input type="date" value={form.expires_at} onChange={e => setForm(f => ({ ...f, expires_at: e.target.value }))} style={inputStyle} max="2099-12-31" />
               </Field>
               <Field icon={<Tag size={14} />} label="광고 소재 종류">
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
@@ -614,6 +614,40 @@ function Field({ icon, label, children }: { icon: React.ReactNode; label: string
         {icon} {label}
       </label>
       {children}
+    </div>
+  )
+}
+
+// 심의번호 마스크 입력: XXXXXX-중-XXXXXX
+function ReviewNumberInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  // value는 "250320-중-185904" 형식으로 저장
+  const parts = value.split('-중-')
+  const left = parts[0] || ''
+  const right = parts[1] ?? ''
+
+  const update = (l: string, r: string) => {
+    const clean = (s: string) => s.replace(/\D/g, '').slice(0, 6)
+    const cl = clean(l), cr = clean(r)
+    onChange(cl || cr ? `${cl}-중-${cr}` : '')
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+      <input
+        value={left}
+        onChange={e => update(e.target.value, right)}
+        placeholder="250320"
+        maxLength={6}
+        style={{ ...inputStyle, textAlign: 'center', letterSpacing: 2, flex: 1 }}
+      />
+      <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-muted)', flexShrink: 0 }}>- 중 -</span>
+      <input
+        value={right}
+        onChange={e => update(left, e.target.value)}
+        placeholder="185904"
+        maxLength={6}
+        style={{ ...inputStyle, textAlign: 'center', letterSpacing: 2, flex: 1 }}
+      />
     </div>
   )
 }
