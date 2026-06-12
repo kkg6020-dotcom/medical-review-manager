@@ -98,6 +98,7 @@ export default function Home() {
 
   // 라이트박스
   const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -319,13 +320,57 @@ export default function Home() {
       </header>
 
       {/* 탭 */}
-      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '0 28px', display: 'flex' }}>
-        {(['list', 'hospital'] as Tab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: '14px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'inherit', color: tab === t ? 'var(--accent)' : 'var(--text-muted)', borderBottom: `2.5px solid ${tab === t ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 6 }}>
-            {t === 'list' ? <><FileText size={14} /> 전체 목록</> : <><Building2 size={14} /> 병원별 현황</>}
+      <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'stretch' }}>
+        <div style={{ display: 'flex', padding: '0 28px', flex: 1 }}>
+          {(['list', 'hospital'] as Tab[]).map(t => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: '14px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer', background: 'none', border: 'none', fontFamily: 'inherit', color: tab === t ? 'var(--accent)' : 'var(--text-muted)', borderBottom: `2.5px solid ${tab === t ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.15s', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {t === 'list' ? <><FileText size={14} /> 전체 목록</> : <><Building2 size={14} /> 병원별 현황</>}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', padding: '0 20px', borderLeft: '1px solid var(--border)' }}>
+          <button onClick={() => setShowGuide(g => !g)} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '6px 13px', background: showGuide ? 'var(--accent)' : 'var(--accent-light)', color: showGuide ? 'white' : 'var(--accent)', border: `1.5px solid ${showGuide ? 'var(--accent)' : '#bfdbfe'}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', transition: 'all .15s' }}>
+            📖 사용 가이드
           </button>
-        ))}
+        </div>
       </div>
+
+      {/* 가이드 패널 오버레이 */}
+      {showGuide && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 150 }} onClick={() => setShowGuide(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 320, background: 'var(--surface)', borderLeft: '1px solid var(--border)', boxShadow: '-4px 0 32px rgba(0,0,0,.13)', display: 'flex', flexDirection: 'column', animation: 'slideInRight .25s ease' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 20px 14px', borderBottom: '1px solid var(--border)', background: 'linear-gradient(135deg, #f0f4ff, #e8f0fe)', flexShrink: 0 }}>
+              <span style={{ fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 7 }}>📖 사용 가이드</span>
+              <button onClick={() => setShowGuide(false)} style={{ border: 'none', background: '#e2e8f0', cursor: 'pointer', width: 28, height: 28, borderRadius: 7, fontSize: 17, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>×</button>
+            </div>
+            <div style={{ overflowY: 'auto', padding: '16px 18px', flex: 1 }}>
+              {[
+                { title: '➕ 심의 추가', items: ['오른쪽 위 + 심의 추가 클릭', '병원명 입력 — 기존 병원이면 담당자 자동 선택', '심의번호 앞 6자리 / 뒤 6자리 입력 (숫자만)', '승인일 입력 시 만료일 자동 계산 (+3년)', '소재 종류 선택 후 이미지 업로드', '담당자 지정 후 저장'], tip: null },
+                { title: '👤 담당자 관리', items: ['헤더 담당자 관리 버튼 클릭', '이름 + 색상 선택 후 추가', '삭제 시 해당 심의는 미지정으로 변경'], tip: '색상으로 담당자를 구분하면 한눈에 보여요.' },
+                { title: '📋 심의 복사', items: ['목록에서 복사 아이콘 클릭', '병원명·번호·날짜·소재·담당자 자동 입력', '심의번호·날짜만 수정 후 바로 저장 가능'], tip: '같은 병원 갱신 심의 등록할 때 편리해요.' },
+                { title: '🔍 필터 & 검색', items: ['상단 카드 클릭 → 만료 상태별 필터', '병원명 ▼ → 복수 병원 동시 선택', '담당자 드롭다운 → 담당자별 보기', '검색창 → 병원명·심의번호 검색'], tip: null },
+                { title: '🖼 이미지 관리', items: ['소재 종류별로 이미지 분류 업로드', '썸네일 클릭 → 원본 이미지 확대', '심의 삭제 시 이미지도 함께 삭제'], tip: '배너·영상·SNS 소재를 한 심의에 묶어 관리해요.' },
+                { title: '⚠️ 만료 기준', items: ['만료됨 — 만료일이 지난 심의', 'D-30 — 30일 이내 만료 예정', 'D-90 — 90일 이내 만료 예정', '정상 — 90일 이상 남은 심의'], tip: '의료광고 심의 유효기간은 승인일로부터 3년이에요.' },
+              ].map((section, si) => (
+                <div key={si}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--accent)', marginBottom: 9 }}>{section.title}</div>
+                  <ol style={{ paddingLeft: 16, display: 'flex', flexDirection: 'column', gap: 6, marginBottom: section.tip ? 8 : 0 }}>
+                    {section.items.map((item, ii) => (
+                      <li key={ii} style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.6 }}>{item}</li>
+                    ))}
+                  </ol>
+                  {section.tip && (
+                    <div style={{ padding: '7px 10px', background: '#fffbeb', borderLeft: '3px solid #f59e0b', borderRadius: '0 6px 6px 0', fontSize: 11.5, color: '#78350f', lineHeight: 1.5, marginBottom: 0 }}>
+                      💡 {section.tip}
+                    </div>
+                  )}
+                  {si < 5 && <div style={{ height: 1, background: 'var(--border)', margin: '14px 0' }} />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '28px 20px' }}>
 
